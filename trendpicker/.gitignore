@@ -1,0 +1,90 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual env
+.venv/
+venv/
+env/
+ENV/
+
+# Testing & coverage
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.pyc
+.pytest_cache/
+htmlcov/
+
+# Type checkers
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+.pytype/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Project: credentials & secrets (三层防护 - 第二层 存储分离)
+.env
+.env.local
+.env.*.local
+credentials.json
+*.pem
+*.key
+secrets/
+.secrets.baseline.local
+
+# Project: data & DB (本地数据不进库)
+*.db
+*.sqlite
+*.sqlite3
+trendpicker.db
+data/raw/
+data/processed/
+data/cache/
+mlruns/
+mlartifacts/
+models/*.pkl
+models/*.joblib
+models/*.lgb
+
+# Project: logs & reports
+logs/
+*.log
+reports/htmlcov/
+
+# OS
+Thumbs.db
+desktop.ini
