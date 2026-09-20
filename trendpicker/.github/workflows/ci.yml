@@ -1,0 +1,124 @@
+# TrendPicker CI/CD
+# 三层防护中的代码层: pre-commit detect-secrets + pytest + coverage
+
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11"]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: 'pip'
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-cov pytest-mock
+
+      - name: Run tests with coverage
+        env:
+          # CI 路径: GitHub Actions secrets 注入 -> get_credential 走环境变量回退分支
+          CHANMAMA_API_KEY: ${{ secrets.CHANMAMA_API_KEY }}
+          ALI1688_APP_KEY: ${{ secrets.ALI1688_APP_KEY }}
+          ALI1688_APP_SECRET: ${{ secrets.ALI1688_APP_SECRET }}
+          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+          CI: "true"
+        run: |
+          pytest \
+            --cov=trendpicker \
+            --cov-report=xml \
+            --cov-report=term-missing \
+            --junitxml=test-results.xml \
+            --cov-fail-under=70
+
+      - name: Upload coverage to Codecov
+        if: always()
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./coverage.xml
+          fail_ci_if_error: false
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: test-results-py${{ matrix.python-version }}
+          path: |
+            test-results.xml
+            coverage.xml
+
+  secret-scan:
+    name: Secret Scan (detect-secrets)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - name: Install detect-secrets
+        run: pip install detect-secrets==1.4.0
+
+      - name: Initialize baseline if missing
+        run: |
+          if [ ! -f .secrets.baseline ]; then
+            echo "Initializing empty baseline..."
+            detect-secrets scan > .secrets.baseline
+          fi
+
+      - name: Scan for hardcoded secrets
+        run: detect-secrets scan --baseline .secrets.baseline
+
+  lint:
+    name: Lint (black / isort / flake8)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+          cache: 'pip'
+
+      - name: Install linters
+        run: |
+          pip install black==23.9.1 isort==5.12.0 flake8==6.1.0
+
+      - name: black --check
+        run: black --check --line-length=100 src tests
+
+      - name: isort --check
+        run: isort --check --profile=black --line-length=100 src tests
+
+      - name: flake8
+        run: flake8 --max-line-length=100 --extend-ignore=E203,W503 src tests
