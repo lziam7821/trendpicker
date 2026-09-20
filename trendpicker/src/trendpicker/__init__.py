@@ -2,10 +2,14 @@
 
 模块分层:
     - credentials : 凭据管理 (Keychain + dotenv)
-    - features    : 特征工程 (P1 后)
-    - label       : 爆款标签构造 (P1 后)
-    - ingestion  : 数据摄入管道 (P1 后)
-    - models      : V1 规则版 / V2 LightGBM (P2 后)
+    - features    : 特征工程
+    - label       : 爆款标签构造
+    - ingestion  : 数据摄入管道
+    - dedup      : 同款聚合
+    - category_map : 类目映射
+    - compliance  : PII 脱敏
+    - db          : 数据库管理
+    - models      : V1 规则版 / V2 LightGBM
 """
 
 __version__ = "0.1.0"
