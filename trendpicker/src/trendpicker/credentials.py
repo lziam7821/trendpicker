@@ -11,7 +11,8 @@
     两条路径共用同一 get_credential 函数, 代码无分支。
 
 凭据清单 (注册制 - 未在 CREDENTIAL_NAMES 登记的凭据名禁止读取):
-    - CHANMAMA_API_KEY        蝉妈妈 API Key (主数据源)
+    - TIKHUB_API_KEY          TikHub API Key - 抖音商城数据 (主数据源)
+    - CHANMAMA_API_KEY        蝉妈妈 API Key (备用数据源)
     - ALI1688_APP_KEY         1688 AppKey (货源匹配)
     - ALI1688_APP_SECRET      1688 AppSecret (货源匹配)
     - TAOBAOKE_TOKEN          淘宝客 token (联盟数据补充)
@@ -42,7 +43,8 @@ SERVICE_NAME = os.environ.get("TRENDPICKER_KEYRING_SERVICE", "trendpicker")
 
 # 凭据清单: name -> 用途说明 (审计与轮换提醒用)
 CREDENTIAL_NAMES: Dict[str, str] = {
-    "CHANMAMA_API_KEY": "蝉妈妈 API Key - 主数据源 (90 天轮换)",
+    "TIKHUB_API_KEY": "TikHub API Key - 抖音商城数据主数据源 (90 天轮换)",
+    "CHANMAMA_API_KEY": "蝉妈妈 API Key - 备用数据源 (90 天轮换)",
     "ALI1688_APP_KEY": "1688 AppKey - 货源匹配 (90 天轮换)",
     "ALI1688_APP_SECRET": "1688 AppSecret - 货源匹配 (90 天轮换)",
     "TAOBAOKE_TOKEN": "淘宝客 token - 联盟数据补充 (90 天轮换)",
@@ -75,8 +77,12 @@ def get_credential(name: str) -> str:
             f"请在 CREDENTIAL_NAMES 中登记后再调用 get_credential."
         )
 
-    # 1. 优先读 macOS Keychain
-    value = keyring.get_password(SERVICE_NAME, name)
+    # 1. 优先读 macOS Keychain (Linux 无 backend 时回退到环境变量)
+    try:
+        value = keyring.get_password(SERVICE_NAME, name)
+    except keyring.errors.NoKeyringError:
+        # Linux/CI 环境无 Keychain backend, 直接走环境变量
+        value = None
 
     # 2. 回退环境变量 (CI 路径 - GitHub Actions secrets)
     if value is None:

@@ -1,6 +1,7 @@
 # ============ Core (Phase 1: 脚手架) ============
 python-dotenv>=1.0.0
 keyring>=24.0.0
+tikhub>=2.1.0
 
 # ============ Data ============
 pandas>=2.0.0
