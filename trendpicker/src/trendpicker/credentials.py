@@ -11,6 +11,8 @@
     两条路径共用同一 get_credential 函数, 代码无分支。
 
 凭据清单 (注册制 - 未在 CREDENTIAL_NAMES 登记的凭据名禁止读取):
+    - TIKHUB_API_KEY          TikHub API Key (小红书 / 微信视频号 / TikTok 内容搜索)
+    - JUSTONEAPI_API_KEY      JustOneAPI token (抖音电商商品 / 销量数据)
     - CHANMAMA_API_KEY        蝉妈妈 API Key (主数据源)
     - ALI1688_APP_KEY         1688 AppKey (货源匹配)
     - ALI1688_APP_SECRET      1688 AppSecret (货源匹配)
@@ -19,6 +21,11 @@
     - LLM_API_KEY             LLM API Key (标题润色/情感分析)
     - DOUYIN_SHOP_TOKEN       抖店店铺授权 token (P2 后启用)
     - PDD_SHOP_TOKEN          PDD 店铺授权 token (P2 后启用)
+
+数据获取强硬规则 (详见 DATA_FETCH_POLICY.md):
+    - 外部接口数据必须立即落库 (trendpicker.db), 落库前不得做任何分析
+    - 后续分析只允许从库中读取, 不得再次调用外部接口
+    - 唯一例外: API 探活 / 详情补充, 需在 fetch_log 标注 purpose
 
 轮换周期建议:
     - 服务商 API Key (蝉妈妈/1688/淘宝客/多多进宝): 每 90 天
@@ -42,6 +49,8 @@ SERVICE_NAME = os.environ.get("TRENDPICKER_KEYRING_SERVICE", "trendpicker")
 
 # 凭据清单: name -> 用途说明 (审计与轮换提醒用)
 CREDENTIAL_NAMES: Dict[str, str] = {
+    "TIKHUB_API_KEY": "TikHub API Key - 小红书 / 微信视频号 / TikTok 内容搜索 (90 天轮换)",
+    "JUSTONEAPI_API_KEY": "JustOneAPI token - 抖音电商商品 / 销量数据 (90 天轮换)",
     "CHANMAMA_API_KEY": "蝉妈妈 API Key - 主数据源 (90 天轮换)",
     "ALI1688_APP_KEY": "1688 AppKey - 货源匹配 (90 天轮换)",
     "ALI1688_APP_SECRET": "1688 AppSecret - 货源匹配 (90 天轮换)",
