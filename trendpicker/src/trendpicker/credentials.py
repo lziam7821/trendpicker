@@ -11,7 +11,8 @@
     两条路径共用同一 get_credential 函数, 代码无分支。
 
 凭据清单 (注册制 - 未在 CREDENTIAL_NAMES 登记的凭据名禁止读取):
-    - TIKHUB_API_KEY          TikHub API Key - 抖音商城数据 (主数据源)
+    - TIKHUB_API_KEY          TikHub API Key - TikTok Shop 海外数据
+    - JUSTONEAPI_TOKEN        JustOneAPI Token - 抖音电商国内主数据源
     - CHANMAMA_API_KEY        蝉妈妈 API Key (备用数据源)
     - ALI1688_APP_KEY         1688 AppKey (货源匹配)
     - ALI1688_APP_SECRET      1688 AppSecret (货源匹配)
@@ -43,7 +44,8 @@ SERVICE_NAME = os.environ.get("TRENDPICKER_KEYRING_SERVICE", "trendpicker")
 
 # 凭据清单: name -> 用途说明 (审计与轮换提醒用)
 CREDENTIAL_NAMES: Dict[str, str] = {
-    "TIKHUB_API_KEY": "TikHub API Key - 抖音商城数据主数据源 (90 天轮换)",
+    "TIKHUB_API_KEY": "TikHub API Key - TikTok Shop 海外数据源 (90 天轮换)",
+    "JUSTONEAPI_TOKEN": "JustOneAPI Token - 抖音电商国内主数据源 (90 天轮换)",
     "CHANMAMA_API_KEY": "蝉妈妈 API Key - 备用数据源 (90 天轮换)",
     "ALI1688_APP_KEY": "1688 AppKey - 货源匹配 (90 天轮换)",
     "ALI1688_APP_SECRET": "1688 AppSecret - 货源匹配 (90 天轮换)",
