@@ -21,48 +21,55 @@ class TestSearchProducts:
 
     def test_search_products_returns_dataframe(self, mock_client):
         """搜索返回 DataFrame."""
-        # 模拟 TikHub 返回结构
+        # 模拟 TikTok Shop 真实返回结构: data.data.component_data.products
         mock_client.tiktok_shop_web.fetch_search_products_list_v2.return_value = {
             "code": 200,
             "data": {
-                "products": [
-                    {
-                        "product_id": "123",
-                        "title": "测试商品口红",
-                        "price": 9900,  # 分
-                        "sales": 1000,
-                        "shop_name": "测试店铺",
-                        "category_id": "cat_001",
-                    },
-                    {
-                        "product_id": "456",
-                        "title": "测试商品面霜",
-                        "price": 159.0,
-                        "sales": "2.5万",
-                        "shop_name": "测试店铺2",
-                        "category_id": "cat_002",
-                    },
-                ]
+                "data": {
+                    "component_data": {
+                        "products": [
+                            {
+                                "product_id": "1729571327109927766",
+                                "title": "Silk Finish Lipstick",
+                                "product_price_info": {
+                                    "sale_price_decimal": "4.99",
+                                },
+                                "sold_info": {"sold_count": 79},
+                                "seller_info": {"shop_name": "Test Shop"},
+                            },
+                            {
+                                "product_id": "456",
+                                "title": "测试商品面霜",
+                                "product_price_info": {
+                                    "sale_price_decimal": "15.90",
+                                },
+                                "sold_info": {"sold_count": 250},
+                                "seller_info": {"shop_name": "测试店铺2"},
+                            },
+                        ]
+                    }
+                }
             },
         }
 
-        df = tikhub_module.search_products("口红", region="cn", count=10)
+        df = tikhub_module.search_products("lipstick", region="US", count=10)
 
         assert isinstance(df, pd.DataFrame)
         assert len(df) == 2
-        assert df.iloc[0]["product_id"] == "123"
-        assert df.iloc[0]["title"] == "测试商品口红"
-        # 价格 9900 分 → 99.0 元
-        assert df.iloc[0]["price"] == 99.0
-        # 销量 "2.5万" → 25000
-        assert df.iloc[1]["sales"] == 25000
+        assert df.iloc[0]["product_id"] == "1729571327109927766"
+        assert df.iloc[0]["title"] == "Silk Finish Lipstick"
+        # sale_price_decimal "4.99" → 4.99
+        assert df.iloc[0]["price"] == 4.99
+        # sold_count 250
+        assert df.iloc[1]["sales"] == 250
+        assert df.iloc[0]["shop_name"] == "Test Shop"
         assert df.iloc[0]["source"] == "tikhub"
 
     def test_search_products_empty_result(self, mock_client):
         """空结果返回空 DataFrame."""
         mock_client.tiktok_shop_web.fetch_search_products_list_v2.return_value = {
             "code": 200,
-            "data": None,
+            "data": {"data": {"component_data": {"products": []}}},
         }
 
         df = tikhub_module.search_products("不存在的关键词")
@@ -137,16 +144,17 @@ class TestGetProductReviews:
 class TestPriceParsing:
     """价格解析."""
 
-    def test_parse_price_in_cents(self):
-        """价格以分为单位."""
-        assert tikhub_module._parse_price({"price": 9900}) == 99.0
+    def test_parse_price_from_product_price_info(self):
+        """从 product_price_info.sale_price_decimal 取价."""
+        item = {"product_price_info": {"sale_price_decimal": "4.99"}}
+        assert tikhub_module._parse_price(item) == 4.99
 
-    def test_parse_price_in_yuan(self):
-        """价格以元为单位."""
+    def test_parse_price_direct_float(self):
+        """直接 price 字段 (数字)."""
         assert tikhub_module._parse_price({"price": 99.0}) == 99.0
 
     def test_parse_price_string(self):
-        """价格字符串."""
+        """price 字符串."""
         assert tikhub_module._parse_price({"price": "99.00"}) == 99.0
 
     def test_parse_price_missing(self):
@@ -157,8 +165,13 @@ class TestPriceParsing:
 class TestSalesParsing:
     """销量解析."""
 
-    def test_parse_sales_int(self):
-        """整数销量."""
+    def test_parse_sales_from_sold_info(self):
+        """从 sold_info.sold_count 取销量."""
+        item = {"sold_info": {"sold_count": 79}}
+        assert tikhub_module._parse_sales(item) == 79
+
+    def test_parse_sales_direct_int(self):
+        """直接 sales 字段."""
         assert tikhub_module._parse_sales({"sales": 100}) == 100
 
     def test_parse_sales_wan(self):

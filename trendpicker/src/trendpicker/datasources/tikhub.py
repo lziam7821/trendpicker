@@ -21,8 +21,11 @@ from ..credentials import get_credential
 
 logger = logging.getLogger(__name__)
 
-# TikHub 区域常量 (抖音商城用 'cn')
-REGION_CN = "cn"
+# TikHub 区域常量
+# TikTok Shop (tiktok_shop_web) 支持的 region: BR/ID/JP/MX/MY/PH/SG/TH/US/VN
+# 注意: 不支持中国大陆 (CN), 中国大陆抖音商城需通过 douyin_web 直播间商品接口
+REGION_US = "US"  # 默认区域 (TikTok Shop 美国)
+REGION_CN = "cn"  # 中国大陆 (用于 douyin_web 系列接口, 非 tiktok_shop_web)
 
 
 def _get_client():
@@ -39,14 +42,15 @@ def _get_client():
 
 def search_products(
     keyword: str,
-    region: str = REGION_CN,
+    region: str = REGION_US,
     count: int = 20,
 ) -> pd.DataFrame:
-    """按关键词搜索抖音商城商品.
+    """按关键词搜索 TikTok Shop 商品.
 
     Args:
         keyword: 搜索关键词
-        region: 区域, 默认 'cn' (中国抖音商城)
+        region: 区域, 默认 'US' (TikTok Shop 美国)
+            支持的 region: BR/ID/JP/MX/MY/PH/SG/TH/US/VN
         count: 返回数量, 默认 20
 
     Returns:
@@ -66,24 +70,20 @@ def search_products(
         return pd.DataFrame()
 
     # 解析响应
-    data = _extract_data(result)
-    if not data:
-        return pd.DataFrame()
-
-    products = _parse_search_results(data)
+    products = _parse_search_results(result)
     df = pd.DataFrame(products)
     return df.head(count)
 
 
 def get_product_detail(
     product_id: str,
-    region: str = REGION_CN,
+    region: str = REGION_US,
 ) -> dict:
     """获取商品详情.
 
     Args:
         product_id: 商品 ID
-        region: 区域
+        region: 区域, 默认 'US'
 
     Returns:
         商品详情 dict
@@ -107,14 +107,14 @@ def get_product_detail(
 
 def get_product_reviews(
     product_id: str,
-    region: str = REGION_CN,
+    region: str = REGION_US,
     count: int = 20,
 ) -> pd.DataFrame:
     """获取商品评价.
 
     Args:
         product_id: 商品 ID
-        region: 区域
+        region: 区域, 默认 'US'
         count: 返回评价数
 
     Returns:
@@ -143,7 +143,7 @@ def get_product_reviews(
 
 def get_products_by_category(
     category_id: str,
-    region: str = REGION_CN,
+    region: str = REGION_US,
     count: int = 50,
 ) -> pd.DataFrame:
     """按类目获取商品列表.
@@ -169,11 +169,7 @@ def get_products_by_category(
         logger.error("TikHub 类目商品获取失败: %s", e)
         return pd.DataFrame()
 
-    data = _extract_data(result)
-    if not data:
-        return pd.DataFrame()
-
-    products = _parse_search_results(data)
+    products = _parse_search_results(result)
     return pd.DataFrame(products).head(count)
 
 
@@ -207,15 +203,19 @@ def _extract_data(result) -> Optional[dict]:
 def _parse_search_results(data: dict) -> List[dict]:
     """解析搜索结果为统一 schema.
 
+    TikTok Shop 搜索响应结构:
+        data.data.component_data.products (list) 每个含:
+            product_id, title, product_price_info.sale_price_decimal,
+            sold_info.sold_count, seller_info.shop_name
+
     Args:
-        data: TikHub 返回的商品数据
+        data: TikHub 返回的顶层响应 dict
 
     Returns:
-        商品 dict 列表
+        商品 dict 列表 (统一 schema)
     """
     products: List[dict] = []
 
-    # TikHub 搜索结果通常在 data.products 或 data.list
     raw_list = _get_product_list(data)
     if not raw_list:
         return products
@@ -224,12 +224,20 @@ def _parse_search_results(data: dict) -> List[dict]:
         if not isinstance(item, dict):
             continue
 
+        # seller_info.shop_name
+        seller_info = item.get("seller_info") or {}
+        shop_name = (
+            seller_info.get("shop_name")
+            if isinstance(seller_info, dict)
+            else None
+        ) or item.get("shop_name") or ""
+
         product = {
             "product_id": str(item.get("product_id") or item.get("id") or ""),
             "title": item.get("title") or item.get("name") or "",
             "price": _parse_price(item),
             "sales": _parse_sales(item),
-            "shop_name": item.get("shop_name") or item.get("seller_name") or "",
+            "shop_name": shop_name,
             "category_id": str(item.get("category_id") or ""),
             "source": "tikhub",
             "region": REGION_CN,
@@ -270,16 +278,32 @@ def _parse_reviews(data: dict) -> List[dict]:
 
 
 def _get_product_list(data: dict) -> list:
-    """从响应数据中提取商品列表."""
-    if not data:
+    """从响应数据中提取商品列表.
+
+    TikTok Shop 搜索响应路径 (顶层 result dict):
+        result.data.data.component_data.products
+    其中第一层 data 是 TikHub 包装层, 第二层 data 是 TikTok Shop 业务数据.
+    """
+    if not isinstance(data, dict):
         return []
 
-    # 尝试多种可能的字段名
-    for key in ["products", "product_list", "list", "items", "data"]:
+    # 路径 1: result.data.data.component_data.products (TikTok Shop v2)
+    outer = data.get("data")
+    if isinstance(outer, dict):
+        inner = outer.get("data")
+        if isinstance(inner, dict):
+            cd = inner.get("component_data")
+            if isinstance(cd, dict):
+                products = cd.get("products")
+                if isinstance(products, list):
+                    return products
+
+    # 路径 2: data.products / data.list (兼容其他接口)
+    for key in ["products", "product_list", "list", "items"]:
         if key in data and isinstance(data[key], list):
             return data[key]
 
-    # 如果 data 本身就是列表
+    # data 本身是列表
     if isinstance(data, list):
         return data
 
@@ -302,37 +326,57 @@ def _get_review_list(data: dict) -> list:
 
 
 def _parse_price(item: dict) -> float:
-    """解析价格字段 (TikHub 价格单位通常为分).
+    """解析价格字段.
 
-    启发式判断: 整数且 > 100 视为分 (除以 100 转为元);
-    带小数或 <= 100 视为元.
+    TikTok Shop 商品价格嵌套在:
+        product_price_info.sale_price_decimal (字符串, 如 '4.99')
+
+    兼容旧字段: price / sale_price / min_price (数字或字符串)
     """
+    # 路径 1: product_price_info.sale_price_decimal (TikTok Shop v2)
+    ppi = item.get("product_price_info")
+    if isinstance(ppi, dict):
+        for key in ("sale_price_decimal", "sale_price", "single_product_price_decimal"):
+            val = ppi.get(key)
+            if val is not None:
+                return _to_float(val)
+
+    # 路径 2: 直接字段
     price = item.get("price") or item.get("sale_price") or item.get("min_price")
+    return _to_float(price)
 
-    if isinstance(price, bool):
+
+def _to_float(value) -> float:
+    """安全转 float."""
+    if value is None or isinstance(value, bool):
         return 0.0
-
-    if isinstance(price, (int, float)):
-        price_val = float(price)
-        # 整数且较大 → 以分为单位
-        if price_val > 100 and price_val == int(price_val):
-            return price_val / 100.0
-        return price_val
-
-    if isinstance(price, str):
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
         try:
-            price_val = float(price.replace(",", ""))
-            if price_val > 100 and price_val == int(price_val):
-                return price_val / 100.0
-            return price_val
+            return float(value.replace(",", ""))
         except (ValueError, TypeError):
             return 0.0
-
     return 0.0
 
 
 def _parse_sales(item: dict) -> int:
-    """解析销量字段."""
+    """解析销量字段.
+
+    TikTok Shop 销量嵌套在:
+        sold_info.sold_count (int)
+
+    兼容旧字段: sales / sold_count / sales_count (含 "1.2万" 字符串)
+    """
+    # 路径 1: sold_info.sold_count (TikTok Shop v2)
+    si = item.get("sold_info")
+    if isinstance(si, dict):
+        for key in ("sold_count", "sales_count", "sell_count"):
+            val = si.get(key)
+            if val is not None:
+                return _to_int(val)
+
+    # 路径 2: 直接字段
     sales = (
         item.get("sales")
         or item.get("sold_count")
@@ -340,21 +384,23 @@ def _parse_sales(item: dict) -> int:
         or item.get("sell_count")
         or 0
     )
+    return _to_int(sales)
 
-    if isinstance(sales, (int, float)):
-        return int(sales)
 
-    if isinstance(sales, str):
-        # 处理 "1.2万" 这种格式
-        if "万" in sales:
+def _to_int(value) -> int:
+    """安全转 int, 支持 '1.2万' / '1,000' / 数字."""
+    if value is None or isinstance(value, bool):
+        return 0
+    if isinstance(value, (int, float)):
+        return int(value)
+    if isinstance(value, str):
+        if "万" in value:
             try:
-                num = float(sales.replace("万", ""))
-                return int(num * 10000)
+                return int(float(value.replace("万", "")) * 10000)
             except (ValueError, TypeError):
                 return 0
         try:
-            return int(sales.replace(",", ""))
+            return int(value.replace(",", ""))
         except (ValueError, TypeError):
             return 0
-
     return 0
